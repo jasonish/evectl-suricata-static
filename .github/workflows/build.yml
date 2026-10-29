@@ -1,0 +1,116 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # Tags of the form <suricata>-<release> (e.g. 8.0.8-1) are releases and
+  # must match versions.env. Any other tag is a test prerelease.
+  check-tag:
+    runs-on: ubuntu-24.04
+    outputs:
+      prerelease: ${{ steps.tag.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check tag matches versions.env
+        id: tag
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          tag="${GITHUB_REF#refs/tags/}"
+          if [[ "$tag" =~ ^[0-9]+\.[0-9]+\.[0-9]+-[0-9]+$ ]]; then
+            source versions.env
+            expected="${SURICATA_VERSION}-${PACKAGE_RELEASE}"
+            if [[ "$tag" != "$expected" ]]; then
+              echo "Tag $tag does not match versions.env ($expected)" >&2
+              exit 1
+            fi
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: check-tag
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [gnu, musl]
+        arch: [x86_64, aarch64]
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build and package
+        env:
+          CONTAINER: docker
+          ARCH: ${{ matrix.arch }}
+        run: ./build.sh ${{ matrix.variant }}
+
+      - name: Show artifacts
+        run: ls -la dist && cat dist/SHA256SUMS
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: suricata-linux-${{ matrix.variant }}-${{ matrix.arch }}
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  release:
+    needs: [check-tag, build]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: suricata-linux-*
+          path: dist
+          merge-multiple: true
+
+      - name: Checksums
+        run: |
+          cd dist
+          sha256sum *.tar.gz > SHA256SUMS
+          ls -la
+          cat SHA256SUMS
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: suricata-linux
+          path: |
+            dist/*.tar.gz
+            dist/SHA256SUMS
+          if-no-files-found: error
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          prerelease: ${{ needs.check-tag.outputs.prerelease == 'true' }}
+          files: |
+            dist/*.tar.gz
+            dist/SHA256SUMS
+          body: |
+            Suricata ${{ github.ref_name }} for Linux (x86_64 and aarch64), as
+            self-contained archives:
+
+            - `linux-gnu`: links only glibc dynamically and runs on any
+              distribution with glibc 2.28 or newer (RHEL/Alma/Rocky 8+,
+              Debian 10+, Ubuntu 20.04+). Supports plugins.
+            - `linux-musl`: fully static, runs on any Linux including
+              Alpine. Cannot load plugins.
+
+            Both include Hyperscan (Vectorscan), libmagic with its matching
+            magic.mgc, AF_PACKET, GeoIP2, libnet and libcap-ng. See
+            BUILD-INFO.txt inside the archive for details.
