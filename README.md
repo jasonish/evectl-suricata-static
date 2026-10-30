@@ -29,21 +29,33 @@ matchers.
 
 ```
 suricata-<version>-<release>-linux-<variant>-<arch>/
-  suricata               the binary
-  suricata.yaml          default config (paths: /etc/suricata,
+  bin/
+    suricata
+    suricatasc           unix socket client
+    suricatactl          filestore management
+  etc/
+    suricata.yaml        default config (paths: /etc/suricata,
                          /var/log/suricata, /var/lib/suricata)
-  classification.config
-  reference.config
-  threshold.config
-  magic.mgc              libmagic database matching the linked libmagic
+    classification.config
+    reference.config
+    threshold.config
+    magic.mgc            libmagic database matching the linked libmagic
   rules/                 Suricata's bundled event rules
   LICENSE
   BUILD-INFO.txt         versions, patches and `suricata --build-info`
 ```
 
-With no `magic-file` configured, the patched Suricata uses the
-`magic.mgc` next to the executable (see `patches/`). Older or missing
-system databases are not compatible with the bundled libmagic.
+Every program `make install` puts in `bin` is shipped. suricata-update is
+Python and not included.
+
+With no `magic-file` configured, the patched Suricata uses `magic.mgc`
+next to the executable or in `../etc/` relative to it (see `patches/`).
+Older or missing system databases are not compatible with the bundled
+libmagic.
+
+In the `gnu` variant, `suricatasc` and `suricatactl` (Rust) also link
+`libgcc_s.so.1`, which every glibc system has; `suricata` links only
+glibc.
 
 ## Building
 
@@ -62,8 +74,9 @@ dependencies are cached per library in `work/<variant>-<arch>/deps` and
 rebuilt only when their version or build steps change.
 
 Each build checks the binary's linkage (`scripts/check-linkage.sh`), runs
-a smoke test (`scripts/smoke-test.sh`: config test plus a pcap that must
-trigger libmagic and Hyperscan rules), then repeats the smoke test in
+a smoke test (`scripts/smoke-test.sh`: config test, a pcap that must
+trigger libmagic and Hyperscan rules, `suricatasc` against a running
+Suricata, and `suricatactl`), then repeats the smoke test in
 other distributions' images (`scripts/test-portability.sh`).
 
 ## Releasing

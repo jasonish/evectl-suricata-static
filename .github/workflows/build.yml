@@ -111,6 +111,7 @@ jobs:
             - `linux-musl`: fully static, runs on any Linux including
               Alpine. Cannot load plugins.
 
-            Both include Hyperscan (Vectorscan), libmagic with its matching
+            Both contain suricata, suricatasc and suricatactl in bin/, and
+            include Hyperscan (Vectorscan), libmagic with its matching
             magic.mgc, AF_PACKET, GeoIP2, libnet and libcap-ng. See
             BUILD-INFO.txt inside the archive for details.

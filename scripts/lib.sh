@@ -15,6 +15,17 @@ WORK="$ROOT/work/${VARIANT}-${ARCH}"
 DEPS_PREFIX="$WORK/deps"
 PACKAGE_NAME="suricata-${SURICATA_VERSION}-${PACKAGE_RELEASE}-linux-${VARIANT}-${ARCH}"
 
+# Extra make arguments for building and installing Suricata.
+# musl: Suricata links through libtool, which swallows a plain -static (to
+# libtool it only means "prefer static libtool libraries"), and relinks on
+# install. Override LDFLAGS so libtool hands -static to gcc. This also
+# drops the -rdynamic configure adds for plugins, which a static binary
+# cannot load anyway.
+SURICATA_MAKE_ARGS=()
+if [[ $VARIANT == musl ]]; then
+    SURICATA_MAKE_ARGS+=(LDFLAGS="-L$DEPS_PREFIX/lib -all-static")
+fi
+
 log() {
     printf '\n==> %s\n' "$*"
 }

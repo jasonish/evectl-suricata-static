@@ -80,16 +80,7 @@ log "Configuring: ./configure ${CONFIGURE_ARGS[*]}"
 
 # --- Build ------------------------------------------------------------------
 log "Building"
-make_args=()
-if [[ $VARIANT == musl ]]; then
-    # Suricata links through libtool, which swallows a plain -static (to
-    # libtool it only means "prefer static libtool libraries"). Override
-    # LDFLAGS for the build so libtool hands -static to gcc. This also
-    # drops the -rdynamic configure adds for plugins, which a static binary
-    # cannot load anyway.
-    make_args+=(LDFLAGS="-L$P/lib -all-static")
-fi
-make -j"$JOBS" "${make_args[@]}"
+make -j"$JOBS" "${SURICATA_MAKE_ARGS[@]}"
 
 exe="$SRC/src/suricata"
 "$exe" -V
@@ -109,5 +100,4 @@ done
 if ! grep -qE "^Features:.* LIBCAP_NG( |$)" <<< "$build_info"; then
     die "suricata was built without LIBCAP_NG"
 fi
-
 "$ROOT/scripts/check-linkage.sh" "$exe"

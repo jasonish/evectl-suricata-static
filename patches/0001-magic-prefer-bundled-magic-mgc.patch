@@ -1,21 +1,24 @@
 --- a/src/util-magic.c
 +++ b/src/util-magic.c
-@@ -35,6 +35,40 @@
+@@ -35,6 +35,45 @@
  
  #ifdef HAVE_MAGIC
  
 +#ifdef __linux__
 +/**
-+ * \brief Find a magic.mgc shipped next to the suricata executable.
++ * \brief Find a magic.mgc bundled with the suricata executable.
 + *
 + * Self-contained packages ship the database built by the same libmagic
 + * version Suricata is linked against. The system default database may be
 + * missing or in a format this libmagic cannot read.
 + *
++ * Looks for <exe dir>/magic.mgc, then <exe dir>/../etc/magic.mgc.
++ *
 + * \retval buf with the path, or NULL if there is no bundled database
 + */
 +static const char *MagicBundledFile(char *buf, size_t size)
 +{
++    static const char *candidates[] = { "magic.mgc", "../etc/magic.mgc" };
 +    char exe[PATH_MAX];
 +    ssize_t len = readlink("/proc/self/exe", exe, sizeof(exe) - 1);
 +    if (len <= 0) {
@@ -27,21 +30,23 @@
 +        return NULL;
 +    }
 +    *slash = '\0';
-+    int written = snprintf(buf, size, "%s/magic.mgc", exe);
-+    if (written < 0 || (size_t)written >= size) {
-+        return NULL;
++    for (size_t i = 0; i < ARRAY_SIZE(candidates); i++) {
++        int written = snprintf(buf, size, "%s/%s", exe, candidates[i]);
++        if (written < 0 || (size_t)written >= size) {
++            continue;
++        }
++        if (access(buf, R_OK) == 0) {
++            return buf;
++        }
 +    }
-+    if (access(buf, R_OK) != 0) {
-+        return NULL;
-+    }
-+    return buf;
++    return NULL;
 +}
 +#endif
 +
  /**
   * \brief Initialize a "magic" context.
   */
-@@ -52,6 +86,15 @@
+@@ -52,6 +91,15 @@
  
      (void)SCConfGet("magic-file", &filename);
  
